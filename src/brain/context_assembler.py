@@ -41,26 +41,31 @@ def build_profile_summary(profile: dict) -> str:
         lines.append(f"- Usually sleeps at {schedule['sleep_time']['value']}")
     if "work_schedule" in schedule:
         lines.append(f"- Work: {schedule['work_schedule']['value']}")
+    # Show all other schedule items dynamically
+    for k, v in schedule.items():
+        if k not in ("wake_time", "sleep_time", "work_schedule"):
+            lines.append(f"- {k.replace('_', ' ').capitalize()}: {v['value']}")
 
     prefs = profile.get("preference", {})
-    if "temperature" in prefs:
-        lines.append(f"- Preferred temperature: {prefs['temperature']['value']}°C")
-    if "music_genre" in prefs:
-        lines.append(f"- Music taste: {prefs['music_genre']['value']}")
+    for k, v in prefs.items():
+        lines.append(f"- {k.replace('_', ' ').capitalize()}: {v['value']}")
 
     hobbies = profile.get("hobby", {})
-    if hobbies:
-        items = [k for k in hobbies]
-        lines.append(f"- Hobbies/interests: {', '.join(items)}")
+    for k, v in hobbies.items():
+        lines.append(f"- Hobby/interest: {v['value']}")
 
     household = profile.get("household", {})
-    if "other_members" in household:
-        lines.append(f"- Household: {household['other_members']['value']}")
+    for k, v in household.items():
+        lines.append(f"- Household ({k.replace('_', ' ')}): {v['value']}")
 
     vocab = profile.get("vocabulary", {})
     if vocab:
         mappings = [f'"{k}" means "{v["value"]}"' for k, v in vocab.items()]
         lines.append(f"- Custom vocabulary: {'; '.join(mappings)}")
+
+    personality = profile.get("personality", {})
+    for k, v in personality.items():
+        lines.append(f"- Personality ({k.replace('_', ' ')}): {v['value']}")
 
     return "\n".join(lines) if lines else "No profile data yet."
 
@@ -72,29 +77,20 @@ def assemble_context(user_id: int, session_id: str, persona_name: str, user_name
 
     profile_summary = build_profile_summary(profile)
 
-    # Format conversation history
-    history_text = ""
-    if history:
-        lines = [f"{m['role'].capitalize()}: {m['message']}" for m in history]
-        history_text = "\n".join(lines)
-    else:
-        history_text = "No conversation history yet."
+    history_text = "\n".join(
+        [f"{m['role'].capitalize()}: {m['message']}" for m in history]
+    ) if history else "No conversation history yet."
 
-    # Format patterns
-    pattern_text = ""
-    if patterns:
-        lines = []
-        for p in patterns:
-            lines.append(f"- When {p['trigger_context']} → {p['predicted_action']} (confidence: {p['confidence']:.0%})")
-        pattern_text = "\n".join(lines)
-    else:
-        pattern_text = "Still learning patterns."
+    pattern_text = "\n".join(
+        [f"- When {p['trigger_context']} → {p['predicted_action']} (confidence: {p['confidence']:.0%})"
+         for p in patterns]
+    ) if patterns else "Still learning patterns."
 
-    system_prompt = f"""You are {persona_name}, a warm, witty, and highly intelligent home AI butler.
-You are speaking with {user_name}. You know them well and care about their comfort and wellbeing.
+    system_prompt = f"""You are {persona_name}, a warm, witty, and highly personal home AI butler.
+You are speaking with {user_name}.
 
-CURRENT CONTEXT:
-- Time: {ctx['time']} ({ctx['period']}) on {ctx['day']}, {ctx['date']}
+CURRENT TIME: {ctx['time']} — it is {ctx['period']} on {ctx['day']}, {ctx['date']}.
+You MUST use the current time context in all responses. Never say good morning if it is evening or night.
 
 WHAT YOU KNOW ABOUT {user_name.upper()}:
 {profile_summary}
@@ -105,20 +101,19 @@ LEARNED PATTERNS:
 RECENT CONVERSATION:
 {history_text}
 
-INSTRUCTIONS:
-- Respond naturally and conversationally, like a trusted butler who knows the household well.
-- If the user's request involves a device action, include it at the end of your response as a JSON block like: <action>{{"action": "turn_on", "device": "lights", "area": "bedroom"}}</action>
-- If nothing actionable is needed, just respond warmly in plain text.
-- Be concise. Never be robotic or stiff.
+STRICT INSTRUCTIONS:
+- Always be aware of the current time period ({ctx['period']}) and respond accordingly.
+- Only reference devices or states you have been explicitly told about. Do not invent device states.
+- If the user asks about something you don't know (e.g. device state, to-do list), say you don't have that information yet.
+- If the user's request involves a device action, append it at the END of your response as: <action>{{"action": "...", "device": "...", "area": "..."}}</action>
+- Respond naturally and concisely. Never be robotic.
 - Use the user's name occasionally but not every message.
-- If you notice something relevant from their profile or patterns, reference it naturally.
-- Never mention that you are an AI or a language model."""
+- Never claim to be an AI or language model."""
 
     return system_prompt
 
 
 if __name__ == "__main__":
-    # Quick test — assumes onboarding has been run
     from src.brain.database import get_all_users
     users = get_all_users()
     if not users:

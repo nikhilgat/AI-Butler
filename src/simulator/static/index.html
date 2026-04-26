@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Butler — Home Simulator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f0f13;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+  }
+
+  header h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: 0.05em; color: #fff; }
+  header h1 span { color: #7c6cfc; }
+
+  #status-bar {
+    font-size: 0.78rem;
+    color: #888;
+    background: #1a1a24;
+    padding: 6px 14px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+  #status-dot.connected { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+
+  /* Global indicators */
+  #global-bar {
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .global-device {
+    background: #1a1a24;
+    border: 1px solid #2a2a38;
+    border-radius: 12px;
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+  }
+  .global-device:hover { border-color: #7c6cfc44; }
+  .global-device.active { border-color: #7c6cfc; background: #1e1b38; }
+  .global-device .icon { font-size: 1.2rem; }
+  .global-device .label { color: #aaa; }
+  .global-device.active .label { color: #fff; }
+  .global-device .value { color: #7c6cfc; font-weight: 600; }
+
+  /* Floor plan */
+  #floorplan {
+    width: 100%;
+    max-width: 1100px;
+    display: grid;
+    grid-template-columns: 2fr 1.4fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 12px;
+  }
+
+  .room {
+    background: #15151f;
+    border: 1.5px solid #2a2a38;
+    border-radius: 16px;
+    padding: 18px;
+    position: relative;
+    transition: all 0.3s;
+    min-height: 160px;
+  }
+
+  .room.lit {
+    border-color: #f5c842;
+    box-shadow: inset 0 0 60px rgba(245, 200, 66, 0.06), 0 0 20px rgba(245, 200, 66, 0.04);
+    background: #17160e;
+  }
+
+  .room-name {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #555;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  .room.lit .room-name { color: #aaa; }
+
+  .devices { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .device-btn {
+    background: #1e1e2e;
+    border: 1px solid #2e2e42;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .device-btn:hover { border-color: #7c6cfc66; color: #ccc; }
+  .device-btn.on {
+    background: #1e1b38;
+    border-color: #7c6cfc;
+    color: #fff;
+  }
+  .device-btn.on .dot { background: #7c6cfc; box-shadow: 0 0 5px #7c6cfc; }
+  .device-btn .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #333;
+    flex-shrink: 0;
+  }
+
+  /* Light glow overlay per room */
+  .room-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(255,220,100,0.12) 0%, transparent 70%);
+    transition: opacity 0.4s;
+  }
+  .room.lit .room-glow { opacity: 1; }
+
+  /* Brightness slider */
+  .brightness-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.75rem;
+    color: #666;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a3a;
+    flex: 1;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #7c6cfc;
+    cursor: pointer;
+  }
+
+  /* Porch spans full width bottom */
+  .room.porch { grid-column: 1 / -1; min-height: 90px; }
+
+  /* Last action toast */
+  #toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1e1b38;
+    border: 1px solid #7c6cfc;
+    color: #ccc;
+    padding: 10px 22px;
+    border-radius: 24px;
+    font-size: 0.85rem;
+    transition: transform 0.3s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The <span>Butler</span> — Home Simulator</h1>
+  <div id="status-bar">
+    <div id="status-dot"></div>
+    <span id="status-text">Connecting...</span>
+  </div>
+</header>
+
+<!-- Global devices: thermostat, music, door lock -->
+<div id="global-bar">
+  <div class="global-device" id="g-thermostat">
+    <span class="icon">🌡️</span>
+    <span class="label">Thermostat</span>
+    <span class="value" id="g-temp">21°C</span>
+  </div>
+  <div class="global-device" id="g-music" onclick="toggleDevice('home','music_player')">
+    <span class="icon">🎵</span>
+    <span class="label">Music</span>
+    <span class="value" id="g-music-val">Off</span>
+  </div>
+  <div class="global-device" id="g-lock" onclick="toggleDevice('home','door_lock')">
+    <span class="icon" id="g-lock-icon">🔒</span>
+    <span class="label">Front Door</span>
+    <span class="value" id="g-lock-val">Locked</span>
+  </div>
+</div>
+
+<!-- Floor plan -->
+<div id="floorplan">
+
+  <div class="room" id="room-living_room">
+    <div class="room-glow"></div>
+    <div class="room-name">Living Room</div>
+    <div class="devices">
+      <div class="device-btn" id="dev-living_room-light" onclick="toggleDevice('living_room','light')">
+        <div class="dot"></div>💡 Light
+      </div>
+      <div class="device-btn" id="dev-living_room-tv" onclick="toggleDevice('living_room','tv')">
+        <div class="dot"></div>📺 TV
+      </div>
+      <div class="device-btn" id="dev-living_room-blinds" onclick="toggleDevice('living_room','blinds')">
+        <div class="dot"></div>🪟 Blinds
+      </div>
+    </div>
+    <div class="brightness-row">
+      💡 <input type="range" min="0" max="100" value="100" id="br-living_room"
+        oninput="setBrightness('living_room', this.value)"> <span id="br-living_room-val">100%</span>
+    </div>
+  </div>
+
+  <div class="room" id="room-bedroom">
+    <div class="room-glow"></div>
+    <div class="room-name">Bedroom</div>
+    <div class="devices">
+      <div class="device-btn" id="dev-bedroom-light" onclick="toggleDevice('bedroom','light')">
+        <div class="dot"></div>💡 Light
+      </div>
+      <div class="device-btn" id="dev-bedroom-blinds" onclick="toggleDevice('bedroom','blinds')">
+        <div class="dot"></div>🪟 Blinds
+      </div>
+    </div>
+    <div class="brightness-row">
+      💡 <input type="range" min="0" max="100" value="80" id="br-bedroom"
+        oninput="setBrightness('bedroom', this.value)"> <span id="br-bedroom-val">80%</span>
+    </div>
+  </div>
+
+  <div class="room" id="room-kitchen">
+    <div class="room-glow"></div>
+    <div class="room-name">Kitchen</div>
+    <div class="devices">
+      <div class="device-btn" id="dev-kitchen-light" onclick="toggleDevice('kitchen','light')">
+        <div class="dot"></div>💡 Light
+      </div>
+    </div>
+    <div class="brightness-row">
+      💡 <input type="range" min="0" max="100" value="100" id="br-kitchen"
+        oninput="setBrightness('kitchen', this.value)"> <span id="br-kitchen-val">100%</span>
+    </div>
+  </div>
+
+  <div class="room" id="room-bathroom" style="grid-column:2/3; grid-row:2/3;">
+    <div class="room-glow"></div>
+    <div class="room-name">Bathroom</div>
+    <div class="devices">
+      <div class="device-btn" id="dev-bathroom-light" onclick="toggleDevice('bathroom','light')">
+        <div class="dot"></div>💡 Light
+      </div>
+    </div>
+  </div>
+
+  <div class="room porch" id="room-porch">
+    <div class="room-glow"></div>
+    <div class="room-name">Porch / Entrance</div>
+    <div class="devices">
+      <div class="device-btn" id="dev-porch-light" onclick="toggleDevice('porch','light')">
+        <div class="dot"></div>💡 Light
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  let state = {};
+  let ws;
+
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onopen = () => {
+      document.getElementById('status-dot').classList.add('connected');
+      document.getElementById('status-text').textContent = 'Live';
+    };
+    ws.onclose = () => {
+      document.getElementById('status-dot').classList.remove('connected');
+      document.getElementById('status-text').textContent = 'Reconnecting...';
+      setTimeout(connect, 2000);
+    };
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'state_update') {
+        state = msg.state;
+        renderState();
+        if (msg.result) showToast(msg.result);
+      }
+    };
+  }
+
+  function renderState() {
+    const rooms = ['living_room','bedroom','kitchen','bathroom','porch'];
+    rooms.forEach(room => {
+      const s = state[room];
+      if (!s) return;
+      const roomEl = document.getElementById(`room-${room}`);
+
+      // Light
+      if (s.light !== undefined) {
+        const btn = document.getElementById(`dev-${room}-light`);
+        const isOn = s.light.on;
+        btn.classList.toggle('on', isOn);
+        roomEl.classList.toggle('lit', isOn);
+        const slider = document.getElementById(`br-${room}`);
+        const valEl = document.getElementById(`br-${room}-val`);
+        if (slider) {
+          slider.value = s.light.brightness;
+          if (valEl) valEl.textContent = s.light.brightness + '%';
+        }
+      }
+
+      // TV
+      if (s.tv !== undefined) {
+        document.getElementById(`dev-${room}-tv`)?.classList.toggle('on', s.tv.on);
+      }
+
+      // Blinds
+      if (s.blinds !== undefined) {
+        const btn = document.getElementById(`dev-${room}-blinds`);
+        if (btn) {
+          btn.classList.toggle('on', s.blinds.open);
+          btn.querySelector('.dot').parentElement.childNodes[2].textContent = s.blinds.open ? ' Blinds Open' : ' Blinds Closed';
+        }
+      }
+    });
+
+    // Global devices
+    const h = state.home;
+    if (h) {
+      document.getElementById('g-temp').textContent = h.thermostat.target + '°C';
+
+      const musicOn = h.music_player.on;
+      const musicEl = document.getElementById('g-music');
+      musicEl.classList.toggle('active', musicOn);
+      document.getElementById('g-music-val').textContent = musicOn
+        ? (h.music_player.genre || h.music_player.track || 'Playing')
+        : 'Off';
+
+      const locked = h.door_lock.locked;
+      document.getElementById('g-lock').classList.toggle('active', !locked);
+      document.getElementById('g-lock-icon').textContent = locked ? '🔒' : '🔓';
+      document.getElementById('g-lock-val').textContent = locked ? 'Locked' : 'Unlocked';
+    }
+  }
+
+  async function toggleDevice(room, device) {
+    const s = state[room];
+    if (!s || s[device] === undefined) return;
+    let action = {};
+
+    if (device === 'light') {
+      action = { action: s[device].on ? 'turn_off' : 'turn_on', device: 'light', area: room };
+    } else if (device === 'tv') {
+      action = { action: s[device].on ? 'turn_off' : 'turn_on', device: 'tv', area: room };
+    } else if (device === 'blinds') {
+      action = { action: s[device].open ? 'close' : 'open', device: 'blinds', area: room };
+    } else if (device === 'music_player') {
+      action = { action: s[device].on ? 'turn_off' : 'turn_on', device: 'music_player', area: 'home' };
+    } else if (device === 'door_lock') {
+      action = { action: s[device].locked ? 'unlock' : 'lock', device: 'door_lock', area: 'home' };
+    }
+
+    await fetch('/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(action)
+    });
+  }
+
+  async function setBrightness(room, value) {
+    document.getElementById(`br-${room}-val`).textContent = value + '%';
+    await fetch('/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_brightness', device: 'light', area: room, value: parseInt(value) })
+    });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = '⚡ ' + msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  connect();
+</script>
+</body>
+</html>

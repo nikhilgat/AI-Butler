@@ -1,0 +1,18 @@
+# Module 1 - Voice Pipeline
+openai-whisper
+sounddevice
+numpy
+scipy
+
+# Module 2 - LLM (added when ready)
+# llama-cpp-python
+
+# Module 3 - HA Bridge (added when ready)
+# httpx
+
+# Module 4 - TTS (added when ready)
+# piper-tts
+
+# Backend
+fastapi
+uvicorn
